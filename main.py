@@ -1,10 +1,9 @@
-# File: main.py
 """Main application module for the data ingestion tool."""
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
-from typing import Optional
+from typing import Optional, Dict
 
 from config import (
     DISCIPLINE_MAP, MAIN_WINDOW_SIZE, EXCEL_FILETYPES, 
@@ -165,4 +164,114 @@ class DataIngestionApp:
             return False
         return True
     
-    def _process
+    def _process_sheet(self, excel_proc: ExcelProcessor, 
+                      db_manager: DatabaseManager,
+                      sheet_name: str, 
+                      discipline_id: str,
+                      category_counter: int,
+                      found_categories: Dict[str, str]) -> int:
+        """
+        Process a single sheet from the Excel file.
+        
+        Args:
+            excel_proc: ExcelProcessor instance
+            db_manager: DatabaseManager instance
+            sheet_name: Name of sheet to process
+            discipline_id: Current discipline ID
+            category_counter: Counter for category IDs
+            found_categories: Dict to track found categories
+            
+        Returns:
+            Updated category counter
+        """
+        self.plain_log.log(f"Processing sheet: {sheet_name}")
+        
+        # Process sheet
+        df = excel_proc.process_sheet(sheet_name)
+        
+        # Log invalid rows
+        invalid_rows = excel_proc.get_invalid_rows(df)
+        if invalid_rows:
+            self.plain_log.log(
+                f"Skipping invalid rows in sheet {sheet_name}: "
+                f"rows {', '.join(map(str, invalid_rows))}"
+            )
+        
+        # Find column indices
+        column_indices = excel_proc.find_column_indices(df.columns)
+        if None in column_indices[:2]:  # Check item and unit columns
+            self.error_log.log(
+                f"Required columns not found in sheet {sheet_name}. "
+                "Skipping sheet."
+            )
+            return category_counter
+        
+        current_category_id = None
+        rows_processed = 0
+        
+        # Process each row
+        for idx, row in df.iterrows():
+            # Process row
+            processed_row = excel_proc.process_row(row, column_indices)
+            if not processed_row:
+                continue
+            
+            if processed_row['type'] == 'category':
+                # Handle category
+                category_counter += 1
+                current_category_id = f"{category_counter:03d}"
+                
+                # Insert category
+                db_manager.insert_category(
+                    current_category_id,
+                    processed_row['name'],
+                    discipline_id
+                )
+                
+                # Track found category
+                found_categories[current_category_id] = processed_row['name']
+                
+            elif processed_row['type'] == 'item' and current_category_id:
+                # Handle item
+                max_price = excel_proc.get_max_price(
+                    processed_row['national_price'],
+                    processed_row['sa_price']
+                )
+                
+                # Insert item
+                db_manager.insert_cost_element(
+                    processed_row['name'],
+                    processed_row['unit'],
+                    max_price,
+                    current_category_id
+                )
+                
+                rows_processed += 1
+        
+        self.plain_log.log(
+            f"Processed {rows_processed} items in sheet {sheet_name}"
+        )
+        return category_counter
+    
+    def _log_results(self, found_categories: Dict[str, str]):
+        """
+        Log processing results.
+        
+        Args:
+            found_categories: Dictionary of found categories
+        """
+        if found_categories:
+            self.plain_log.log("Categories processed:")
+            for category_id, category_name in found_categories.items():
+                self.plain_log.log(f"  {category_id}: {category_name}")
+        else:
+            self.plain_log.log("No categories were processed.")
+
+def main():
+    """Main entry point for the application."""
+    root = tk.Tk()
+    app = DataIngestionApp(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
