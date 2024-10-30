@@ -49,7 +49,7 @@ class DatabaseManager:
             discipline_id: Associated discipline ID
         """
         sql = '''INSERT OR IGNORE INTO cost_categories 
-                (category_id, category_name, disciplines_id) 
+                (category_id, category_name, discipline_id) 
                 VALUES (?, ?, ?)'''
         self._execute_sql(sql, (category_id, category_name, discipline_id))
     

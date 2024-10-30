@@ -5,7 +5,7 @@ COST_CATEGORIES_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS cost_categories (
     category_id TEXT PRIMARY KEY, 
     category_name TEXT, 
-    disciplines_id INTEGER,
+    discipline_id INTEGER,
     FOREIGN KEY (disciplines_id) REFERENCES disciplines(discipline_id)
 )
 '''
